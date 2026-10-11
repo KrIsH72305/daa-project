@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shortest Path Finder - DAA Project</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--fg:#1b2030;--mut:#5f6679;--ac:#3b6cf6;--ok:#16a34a;--warn:#f59e0b;--ln:#c3c9d9;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141c;--card:#1c2030;--fg:#e8eaf2;--mut:#98a0b8;--ac:#6b93ff;--ln:#3a4058}}
+:root[data-theme="dark"]{--bg:#12141c;--card:#1c2030;--fg:#e8eaf2;--mut:#98a0b8;--ac:#6b93ff;--ln:#3a4058}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:14px}
+h1{font-size:20px;margin:4px 0 2px}
+.sub{color:var(--mut);margin:0 0 12px;font-size:13px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row label{font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:3px;flex:1 1 120px}
+select,input,button{font:inherit;padding:8px;border-radius:8px;border:1px solid var(--ln);background:var(--bg);color:var(--fg);min-width:0}
+button{background:var(--ac);color:#fff;border:0;font-weight:600;cursor:pointer}
+button.sec{background:var(--bg);color:var(--fg);border:1px solid var(--ln)}
+svg{width:100%;height:auto;display:block;touch-action:none;background:var(--bg);border-radius:10px}
+.tag{display:inline-block;font-size:12px;background:var(--bg);border:1px solid var(--ln);border-radius:20px;padding:2px 10px;margin:2px 4px 2px 0}
+.big{font-size:22px;font-weight:700;color:var(--ok)}
+.sc{overflow-x:auto}
+table{border-collapse:collapse;font-size:12px;width:100%}
+td,th{border:1px solid var(--ln);padding:4px 6px;text-align:center;white-space:nowrap}
+th{background:var(--bg)}
+.hint{font-size:12px;color:var(--mut)}
+.log{font-size:13px;min-height:20px;margin-top:8px;color:var(--fg);font-weight:600}
+.how{font-size:13px}.how p{margin:6px 0}
+</style></head>
+<body><main>
+<h1>Shortest Path Finder</h1>
+<p class="sub">DAA project: Dijkstra, Bellman-Ford, Floyd-Warshall, BFS, DFS on a city map. Drag cities to move them.</p>
+
+<div class="card"><svg id="map" viewBox="0 0 600 400"></svg><div id="log" class="log">Ready. Each step is explained here while it runs.</div></div>
+
+<div class="card">
+ <div class="row">
+  <label>Algorithm<select id="algo">
+   <option value="dij">Dijkstra</option><option value="bf">Bellman-Ford</option>
+   <option value="fw">Floyd-Warshall</option><option value="bfs">BFS (reachability)</option><option value="dfs">DFS (traversal)</option></select></label>
+  <label>Source<select id="src"></select></label>
+  <label>Destination<select id="dst"></select></label>
+ </div>
+ <div class="row" style="margin-top:8px">
+  <label>Speed<input id="spd" type="range" min="1" max="10" value="6"></label>
+  <button id="run">Run</button><button id="cmp" class="sec">Compare all</button>
+ </div>
+</div>
+
+<div class="card">
+ <div class="row">
+  <label>New city<input id="cname" placeholder="City name" maxlength="14"></label>
+  <button id="addc" class="sec" style="align-self:flex-end">Add city</button>
+ </div>
+ <div class="row" style="margin-top:8px">
+  <label>Road length (km), uses Source and Destination<input id="rw" type="number" min="1" placeholder="e.g. 250"></label>
+  <button id="addr" class="sec" style="align-self:flex-end">Add road</button><button id="delr" class="sec" style="align-self:flex-end">Remove road</button>
+  <button id="rst" class="sec" style="align-self:flex-end">Reset map</button>
+ </div>
+</div>
+
+<div class="card how" id="how"></div>
+
+<div class="card" id="out"><span class="hint">Pick an algorithm, source and destination, then press Run.</span></div>
+
+</main>
+<script>
+const INF=1e9, $=id=>document.getElementById(id);
+const sample=()=>({nodes:[{n:'Delhi',x:300,y:50},{n:'Jaipur',x:110,y:150},{n:'Agra',x:330,y:170},{n:'Lucknow',x:520,y:150},{n:'Bhopal',x:300,y:290},{n:'Mumbai',x:120,y:350}],
+ edges:[[0,1,280],[0,2,230],[1,2,240],[2,3,330],[2,4,600],[1,4,600],[3,4,780],[4,5,780],[1,5,1150]]});
+let G=sample(), vis=new Set(), act=null, pathE=new Set(), pathN=new Set(), cur=null, busy=false, drag=-1;
+const key=(a,b)=>a<b?a+'-'+b:b+'-'+a;
+const CX={dij:['O(V²)','O(V)'],bf:['O(V·E)','O(V)'],fw:['O(V³)','O(V²)'],bfs:['O(V²)','O(V)'],dfs:['O(V²)','O(V)']};
+const NM={dij:'Dijkstra',bf:'Bellman-Ford',fw:'Floyd-Warshall',bfs:'BFS',dfs:'DFS'};
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function mat(){const n=G.nodes.length,A=Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>i==j?0:INF));
+ G.edges.forEach(([u,v,w])=>{A[u][v]=A[v][u]=w});return A}
+
+function draw(){
+ const ln=css('--ln'),fg=css('--fg'),ac=css('--ac'),ok=css('--ok'),wr=css('--warn'),card=css('--card');
+ let s='';
+ G.edges.forEach(([u,v,w])=>{const a=G.nodes[u],b=G.nodes[v],k=key(u,v);
+  const col=pathE.has(k)?ok:act==k?wr:ln, sw=pathE.has(k)?5:act==k?4:2;
+  s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${col}" stroke-width="${sw}"/>`;
+  s+=`<text x="${(a.x+b.x)/2}" y="${(a.y+b.y)/2-4}" font-size="12" text-anchor="middle" fill="${fg}" stroke="${card}" stroke-width="3" paint-order="stroke">${w}</text>`});
+ G.nodes.forEach((p,i)=>{
+  const f=cur===i?wr:pathN.has(i)?ok:vis.has(i)?ac:card;
+  const t=(cur===i||pathN.has(i)||vis.has(i))?'#fff':fg;
+  const ring=(i==+$('src').value||i==+$('dst').value)?4:2;
+  s+=`<g data-i="${i}" style="cursor:grab"><circle cx="${p.x}" cy="${p.y}" r="20" fill="${f}" stroke="${ac}" stroke-width="${ring}"/>
+  <text x="${p.x}" y="${p.y+4}" font-size="11" font-weight="700" text-anchor="middle" fill="${t}">${i}</text>
+  <text x="${p.x}" y="${p.y+36}" font-size="12" text-anchor="middle" fill="${fg}">${p.n}</text></g>`});
+ $('map').innerHTML=s}
+
+function fillSel(){const o=G.nodes.map((p,i)=>`<option value="${i}">${p.n}</option>`).join('');
+ const a=$('src').value,b=$('dst').value;$('src').innerHTML=o;$('dst').innerHTML=o;
+ $('src').value=a||0;$('dst').value=b||G.nodes.length-1}
+
+/* ---------- Algorithms (each returns steps for animation + op count) ---------- */
+function dijkstra(s){const A=mat(),n=A.length,d=Array(n).fill(INF),p=Array(n).fill(-1),v=Array(n).fill(0),st=[];let ops=0;d[s]=0;
+ for(let k=0;k<n;k++){let u=-1;for(let i=0;i<n;i++){ops++;if(!v[i]&&(u<0||d[i]<d[u]))u=i}
+  if(u<0||d[u]>=INF)break;v[u]=1;st.push({visit:u,msg:`Pick nearest unvisited city: ${G.nodes[u].n} (${d[u]} km from source)`});
+  for(let w=0;w<n;w++){ops++;if(u!=w&&A[u][w]<INF&&d[u]+A[u][w]<d[w]){d[w]=d[u]+A[u][w];p[w]=u;st.push({edge:[u,w],msg:`Shorter route to ${G.nodes[w].n} found via ${G.nodes[u].n}: ${d[w]} km`})}}}
+ return{d,p,st,ops}}
+
+function bellman(s){const n=G.nodes.length,d=Array(n).fill(INF),p=Array(n).fill(-1),st=[];let ops=0;d[s]=0;
+ const E=G.edges.flatMap(([u,v,w])=>[[u,v,w],[v,u,w]]);
+ for(let i=1;i<n;i++){let ch=false;
+  for(const[u,v,w]of E){ops++;if(d[u]<INF&&d[u]+w<d[v]){d[v]=d[u]+w;p[v]=u;ch=true;st.push({edge:[u,v],visit:v,msg:`Pass ${i}: road ${G.nodes[u].n} → ${G.nodes[v].n} improves distance to ${d[v]} km`})}}
+  if(!ch)break}
+ return{d,p,st,ops}}
+
+function floyd(){const D=mat(),n=D.length,nx=D.map((r,i)=>r.map((x,j)=>x<INF&&i!=j?j:-1)),st=[];let ops=0;
+ for(let k=0;k<n;k++){st.push({visit:k,msg:`Try ${G.nodes[k].n} as an in-between city for every pair`});
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){ops++;
+   if(D[i][k]<INF&&D[k][j]<INF&&D[i][k]+D[k][j]<D[i][j]){D[i][j]=D[i][k]+D[k][j];nx[i][j]=nx[i][k]}}}
+ return{D,nx,st,ops}}
+
+function bfs(s){const A=mat(),n=A.length,h=Array(n).fill(-1),q=[s],order=[],st=[];h[s]=0;let ops=0;
+ while(q.length){const u=q.shift();order.push(u);st.push({visit:u,msg:`Visit ${G.nodes[u].n} (${h[u]} road${h[u]==1?'':'s'} from source)`});
+  for(let v=0;v<n;v++){ops++;if(u!=v&&A[u][v]<INF&&h[v]<0){h[v]=h[u]+1;q.push(v);st.push({edge:[u,v]})}}}
+ return{order,h,st,ops}}
+
+function dfs(s){const A=mat(),n=A.length,seen=Array(n).fill(0),order=[],st=[];let ops=0;
+ (function go(u){seen[u]=1;order.push(u);st.push({visit:u,msg:`Go to ${G.nodes[u].n}, then go deeper; backtrack when stuck`});
+  for(let v=0;v<n;v++){ops++;if(u!=v&&A[u][v]<INF&&!seen[v]){st.push({edge:[u,v]});go(v)}}})(s);
+ return{order,h:seen.map(x=>x?0:-1),st,ops}}
+
+function treePath(p,s,d){const r=[];for(let c=d;c!=-1;c=p[c]){r.push(c);if(c==s)break}return r[r.length-1]==s?r.reverse():null}
+function fwPath(nx,s,d){if(nx[s][d]<0&&s!=d)return null;const r=[s];for(let c=s;c!=d;){c=nx[c][d];r.push(c)}return r}
+
+/* ---------- Animation + output ---------- */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function play(st){const ms=1100-$('spd').value*100;
+ for(const x of st){if(x.visit!=null){cur=x.visit;vis.add(x.visit)}
+  act=x.edge?key(x.edge[0],x.edge[1]):null;if(x.msg)$('log').textContent=x.msg;draw();await sleep(ms)}
+ cur=null;act=null}
+
+function showPath(p){pathE=new Set();pathN=new Set(p);for(let i=0;i<p.length-1;i++)pathE.add(key(p[i],p[i+1]));vis=new Set()}
+const nm=a=>a.map(i=>G.nodes[i].n).join(' → ');
+
+async function run(){
+ if(busy)return;busy=true;$('run').disabled=true;
+ vis=new Set();pathE=new Set();pathN=new Set();draw();
+ const a=$('algo').value,s=+$('src').value,d=+$('dst').value;
+ const t0=performance.now();let R,p=null,dist=null,extra='';
+ if(a=='dij'){R=dijkstra(s);dist=R.d[d];p=treePath(R.p,s,d);extra=distTable(R.d,s)}
+ else if(a=='bf'){R=bellman(s);dist=R.d[d];p=treePath(R.p,s,d);extra=distTable(R.d,s)}
+ else if(a=='fw'){R=floyd();dist=R.D[s][d];p=fwPath(R.nx,s,d);
+  const n=G.nodes.length;extra='<div class="sc" style="margin-top:10px"><table><tr><th></th>'+G.nodes.map(x=>`<th>${x.n}</th>`).join('')+'</tr>'+
+   R.D.map((r,i)=>`<tr><th>${G.nodes[i].n}</th>`+r.map(x=>`<td>${x>=INF?'∞':x}</td>`).join('')+'</tr>').join('')+'</table></div>'}
+ else{R=a=='bfs'?bfs(s):dfs(s)}
+ const ms=(performance.now()-t0).toFixed(3);
+ await play(R.st);
+ let h=`<b>${NM[a]}</b> <span class="tag">Time ${CX[a][0]}</span><span class="tag">Space ${CX[a][1]}</span><span class="tag">${R.ops} operations</span><span class="tag">${ms} ms</span><br>`;
+ if(a=='bfs'||a=='dfs'){
+  const un=R.h.map((x,i)=>x<0?G.nodes[i].n:null).filter(Boolean);
+  vis=new Set(R.order);
+  h+=`<p><b>${a=='bfs'?'Visit order':'DFS order'}:</b> ${nm(R.order)}</p>`;
+  if(a=='bfs')h+=`<p>Roads from ${G.nodes[s].n}: ${R.order.map(i=>G.nodes[i].n+' ('+R.h[i]+')').join(', ')}</p>`;
+  h+=un.length?`<p>Not reachable: ${un.join(', ')}</p>`:`<p>All cities are reachable.</p>`}
+ else if(!p||dist>=INF){h+=`<p>No route from ${G.nodes[s].n} to ${G.nodes[d].n}.</p>`+extra}
+ else{showPath(p);h+=`<div class="big">${dist} km</div><p>${nm(p)}</p>`+extra}
+ $('out').innerHTML=h;$('log').textContent='Done.';draw();busy=false;$('run').disabled=false}
+
+function compare(){const s=+$('src').value,d=+$('dst').value,R=200,rows=[];
+ for(const[k,f]of[['dij',()=>dijkstra(s)],['bf',()=>bellman(s)],['fw',()=>floyd()]]){
+  const t=performance.now();let r;for(let i=0;i<R;i++)r=f();
+  rows.push(`<tr><td>${NM[k]}</td><td>${CX[k][0]}</td><td>${CX[k][1]}</td><td>${r.ops}</td><td>${((performance.now()-t)/R).toFixed(4)}</td></tr>`)}
+ $('out').innerHTML=`<b>Comparison</b> <span class="hint">(source ${G.nodes[s].n}, averaged over ${R} runs)</span><div class="sc" style="margin-top:8px"><table><tr><th>Algorithm</th><th>Time</th><th>Space</th><th>Ops</th><th>ms/run</th></tr>${rows.join('')}</table></div>
+ <p class="hint">Dijkstra is fastest for non-negative weights, Bellman-Ford also supports negative weights, Floyd-Warshall gives every pair at once.</p>`}
+
+/* ---------- Editing ---------- */
+$('addc').onclick=()=>{const n=$('cname').value.trim();if(!n||G.nodes.length>=15)return;
+ G.nodes.push({n,x:60+Math.random()*480,y:40+Math.random()*320});$('cname').value='';fillSel();draw()};
+$('addr').onclick=()=>{const u=+$('src').value,v=+$('dst').value,w=+$('rw').value;
+ if(u==v||!(w>0)){$('out').innerHTML='<span class="hint">Choose two different cities and a positive length.</span>';return}
+ G.edges=G.edges.filter(e=>key(e[0],e[1])!=key(u,v));G.edges.push([u,v,w]);$('rw').value='';draw();
+ $('out').innerHTML=`<span class="hint">Road ${G.nodes[u].n} - ${G.nodes[v].n} (${w} km) saved.</span>`};
+$('rst').onclick=()=>{G=sample();vis=new Set();pathE=new Set();pathN=new Set();fillSel();draw();$('out').innerHTML='<span class="hint">Map reset.</span>'};
+$('run').onclick=run;$('cmp').onclick=compare;
+$('src').onchange=$('dst').onchange=draw;
+
+const svg=$('map');
+svg.addEventListener('pointerdown',e=>{const g=e.target.closest('[data-i]');if(g){drag=+g.dataset.i;svg.setPointerCapture(e.pointerId)}});
+svg.addEventListener('pointermove',e=>{if(drag<0)return;const r=svg.getBoundingClientRect();
+ G.nodes[drag].x=Math.max(25,Math.min(575,(e.clientX-r.left)*600/r.width));
+ G.nodes[drag].y=Math.max(25,Math.min(365,(e.clientY-r.top)*400/r.height));draw()});
+svg.addEventListener('pointerup',()=>drag=-1);
+
+function distTable(d,s){return `<div class="sc" style="margin-top:10px"><table><tr><th>From ${G.nodes[s].n} to</th>${G.nodes.map(x=>`<th>${x.n}</th>`).join('')}</tr><tr><th>km</th>${d.map(x=>`<td>${x>=INF?'∞':x}</td>`).join('')}</tr></table></div>`}
+
+const HOW={
+ dij:['Greedy','Always walk to the nearest city that is not finalised yet.','1) Distance to source = 0, all others = ∞ (unknown). 2) Pick the unvisited city with the smallest distance. 3) Look at its neighbours: if going through this city is shorter, update their distance (this is called relaxation). 4) Mark the city done and repeat until all are done. Works only when no road has negative length.'],
+ bf:['Dynamic Programming','Keep improving every road again and again until nothing gets better.','1) Distance to source = 0, others = ∞. 2) Repeat V-1 times: for every road u→v, if dist[u] + length < dist[v], update dist[v]. 3) Why V-1 times? A shortest path never needs more than V-1 roads. Slower than Dijkstra, but it also works with negative lengths, and one extra pass can detect a negative cycle.'],
+ fw:['Dynamic Programming','Try every city as a possible stop in the middle, for every pair of cities.','Three nested loops: for each k, for each i, for each j: dist[i][j] = min( dist[i][j], dist[i][k] + dist[k][j] ). After all k are tried, the table holds the shortest distance between every pair. Slow (V³) but answers everything in one go.'],
+ bfs:['Graph traversal (Queue)','Visit cities level by level: first all cities 1 road away, then 2 roads away, and so on.','1) Put the start city in a queue. 2) Take a city out, visit it, and add its unvisited neighbours to the queue. 3) Repeat until the queue is empty. It finds the fewest number of roads, and any city never visited is not reachable.'],
+ dfs:['Graph traversal (Recursion/Stack)','Go as deep as possible along one road, then come back and try another.','1) Visit the start city. 2) Move to an unvisited neighbour and repeat from there. 3) When stuck, backtrack to the previous city. Used to check reachability and connectivity.']
+};
+function showHow(){const h=HOW[$('algo').value];$('how').innerHTML=`<b>How it works</b> <span class="tag">${h[0]}</span><p><i>${h[1]}</i></p><p>${h[2]}</p>`}
+$('algo').onchange=showHow;
+$('delr').onclick=()=>{const u=+$('src').value,v=+$('dst').value,n=G.edges.length;
+ G.edges=G.edges.filter(e=>key(e[0],e[1])!=key(u,v));
+ $('out').innerHTML=`<span class="hint">${G.edges.length<n?'Road removed.':'No road between these two cities.'}</span>`;draw()};
+
+showHow();fillSel();$('dst').value=5;draw();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
+</script></body></html>

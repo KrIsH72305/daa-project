@@ -1,0 +1,8 @@
+# Binaries
+spf
+*.exe
+*.o
+
+# Archives & OS
+*.zip
+.DS_Store
